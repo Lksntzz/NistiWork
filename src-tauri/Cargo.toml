@@ -17,3 +17,5 @@ rusqlite = { version = "0.31.0", features = ["bundled"] }
 rusqlite_migration = "1.2.0"
 chrono = { version = "0.4.38", features = ["serde"] }
 lazy_static = "1.5.0"
+uuid = { version = "1.26.0", features = ["v4"] }
+tauri-plugin-shell = "2.3.6"

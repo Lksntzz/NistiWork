@@ -14,6 +14,7 @@ use commands::settings_commands::{get_settings, save_settings};
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Resolve o diretório de dados do app (ex: AppData/Roaming/com.nisti.work)
@@ -31,7 +32,14 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
-            save_settings
+            save_settings,
+            commands::company_commands::list_companies,
+            commands::company_commands::get_company,
+            commands::company_commands::create_company,
+            commands::company_commands::update_company,
+            commands::company_commands::update_company_status,
+            commands::company_commands::delete_company,
+            commands::company_commands::get_company_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

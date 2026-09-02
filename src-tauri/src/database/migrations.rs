@@ -12,6 +12,43 @@ lazy_static! {
                 updated_at TEXT NOT NULL
             );"
         ),
+        // V2: Tabelas de Empresas, Tarefas e Histórico
+        M::up(
+            "CREATE TABLE IF NOT EXISTS companies (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                entry_date TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                status TEXT NOT NULL,
+                local_folder_path TEXT,
+                drive_folder_id TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS tasks (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                status TEXT NOT NULL,
+                due_date TEXT,
+                company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
+                cover_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS activity_history (
+                id TEXT PRIMARY KEY,
+                entity_name TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                previous_status TEXT,
+                new_status TEXT,
+                metadata TEXT,
+                timestamp TEXT NOT NULL
+            );"
+        ),
     ]);
 }
 

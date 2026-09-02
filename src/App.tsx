@@ -8,6 +8,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Queue } from './pages/Queue';
 import { Companies } from './pages/Companies';
+import { CompanyDetail } from './pages/CompanyDetail';
 import { Production } from './pages/Production';
 import { Collections } from './pages/Collections';
 import { Products } from './pages/Products';
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/fila" element={<Queue />} />
           <Route path="/empresas" element={<Companies />} />
+          <Route path="/empresas/:id" element={<CompanyDetail />} />
           <Route path="/producao" element={<Production />} />
           <Route path="/colecoes" element={<Collections />} />
           <Route path="/produtos" element={<Products />} />
