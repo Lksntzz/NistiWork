@@ -19,6 +19,7 @@ export interface Company {
   local_folder_path: string | null;
   drive_folder_id: string | null;
   notes: string | null;
+  due_date?: string | null;
   created_at: string;
   updated_at: string;
 }

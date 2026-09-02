@@ -4,6 +4,7 @@ import { CompanyFormModal } from '../components/CompanyFormModal';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getNextAction, formatStatus } from '../utils/companyUtils';
+import { isBusinessDateOverdue } from '../utils/date';
 import { Building2, Plus, AlertCircle, Search, Clock, CalendarDays, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
@@ -88,7 +89,7 @@ export function Companies() {
           {filteredCompanies?.map((company) => (
             <Link 
               key={company.id} 
-              to={`/companies/${company.id}`}
+              to={`/empresas/${company.id}`}
               className="group block bg-neutral-900 border border-neutral-800 hover:border-indigo-500/50 rounded-xl p-5 transition-all hover:bg-neutral-800/50 cursor-pointer"
             >
               <div className="flex flex-col md:flex-row justify-between gap-4">
@@ -97,13 +98,18 @@ export function Companies() {
                     <h3 className="text-xl font-semibold text-white group-hover:text-indigo-400 transition-colors">
                       {company.name}
                     </h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
                       <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-300 border border-neutral-700">
                         {formatStatus(company.status)}
                       </span>
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${getPriorityColor(company.priority)}`}>
                         {company.priority}
                       </span>
+                      {!!company.due_date && company.status !== 'CONCLUIDA' && isBusinessDateOverdue(company.due_date) && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded-full flex items-center">
+                          Atrasada
+                        </span>
+                      )}
                     </div>
                   </div>
                   

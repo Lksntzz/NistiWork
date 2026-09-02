@@ -11,6 +11,7 @@ pub struct Company {
     pub local_folder_path: Option<String>,
     pub drive_folder_id: Option<String>,
     pub notes: Option<String>,
+    pub due_date: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

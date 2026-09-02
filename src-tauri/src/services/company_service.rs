@@ -25,7 +25,7 @@ pub fn create_company(conn: &mut Connection, mut company: Company) -> Result<Com
     
     let history = ActivityHistory {
         id: Uuid::new_v4().to_string(),
-        entity_name: "company".to_string(),
+        entity_name: "COMPANY".to_string(),
         entity_id: company.id.clone(),
         action: "COMPANY_CREATED".to_string(),
         previous_status: None,
@@ -40,7 +40,7 @@ pub fn create_company(conn: &mut Connection, mut company: Company) -> Result<Com
         title: format!("Produzir arte/mockup — {}", company.name),
         priority: company.priority.clone(),
         status: "PENDENTE".to_string(),
-        due_date: None,
+        due_date: company.due_date.clone(),
         company_id: Some(company.id.clone()),
         cover_id: None,
         created_at: now.clone(),
@@ -56,6 +56,7 @@ pub fn update_company(conn: &mut Connection, mut company: Company) -> Result<()>
     let tx = conn.transaction()?;
     company.updated_at = Utc::now().to_rfc3339();
     company_repository::update(&tx, &company)?;
+    task_repository::update_due_date_by_company(&tx, &company.id, company.due_date.as_deref())?;
     tx.commit()?;
     Ok(())
 }
@@ -75,7 +76,7 @@ pub fn update_company_status(conn: &mut Connection, id: &str, new_status: &str) 
             
             let history = ActivityHistory {
                 id: Uuid::new_v4().to_string(),
-                entity_name: "company".to_string(),
+                entity_name: "COMPANY".to_string(),
                 entity_id: id.to_string(),
                 action: "COMPANY_STATUS_CHANGED".to_string(),
                 previous_status: Some(company.status.clone()),
@@ -93,7 +94,13 @@ pub fn update_company_status(conn: &mut Connection, id: &str, new_status: &str) 
 
 pub fn delete_company(conn: &mut Connection, id: &str) -> Result<()> {
     let tx = conn.transaction()?;
+    
+    // Excluir histórico de atividades órfão antes (polimórfico)
+    activity_history_repository::delete_by_entity(&tx, "COMPANY", id)?;
+    
+    // Excluir a empresa (o SQLite removerá a task via ON DELETE CASCADE)
     company_repository::delete(&tx, id)?;
+    
     tx.commit()?;
     Ok(())
 }
@@ -107,5 +114,5 @@ pub fn get_company(conn: &Connection, id: &str) -> Result<Option<Company>> {
 }
 
 pub fn get_company_history(conn: &Connection, id: &str) -> Result<Vec<ActivityHistory>> {
-    activity_history_repository::list_by_entity(conn, "company", id)
+    activity_history_repository::list_by_entity(conn, "COMPANY", id)
 }

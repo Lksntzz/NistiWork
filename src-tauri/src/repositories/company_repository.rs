@@ -37,17 +37,12 @@ pub fn update_status(conn: &Connection, id: &str, status: &str, updated_at: &str
 }
 
 pub fn delete(conn: &Connection, id: &str) -> Result<()> {
-    // Delete Tasks explicitly if we don't enable FK constraints with CASCADE right away
-    conn.execute("DELETE FROM tasks WHERE company_id = ?1", params![id])?;
-    // Delete Activity History
-    conn.execute("DELETE FROM activity_history WHERE entity_name = 'company' AND entity_id = ?1", params![id])?;
-    // Delete Company
     conn.execute("DELETE FROM companies WHERE id = ?1", params![id])?;
     Ok(())
 }
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<Company>> {
-    let mut stmt = conn.prepare("SELECT id, name, description, entry_date, priority, status, local_folder_path, drive_folder_id, notes, created_at, updated_at FROM companies WHERE id = ?1")?;
+    let mut stmt = conn.prepare("SELECT c.id, c.name, c.description, c.entry_date, c.priority, c.status, c.local_folder_path, c.drive_folder_id, c.notes, c.created_at, c.updated_at, t.due_date FROM companies c LEFT JOIN tasks t ON t.company_id = c.id WHERE c.id = ?1")?;
     let mut rows = stmt.query(params![id])?;
 
     if let Some(row) = rows.next()? {
@@ -63,6 +58,7 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<Company>> {
             notes: row.get(8)?,
             created_at: row.get(9)?,
             updated_at: row.get(10)?,
+            due_date: row.get(11)?,
         }))
     } else {
         Ok(None)
@@ -70,7 +66,7 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<Company>> {
 }
 
 pub fn list(conn: &Connection) -> Result<Vec<Company>> {
-    let mut stmt = conn.prepare("SELECT id, name, description, entry_date, priority, status, local_folder_path, drive_folder_id, notes, created_at, updated_at FROM companies ORDER BY created_at DESC")?;
+    let mut stmt = conn.prepare("SELECT c.id, c.name, c.description, c.entry_date, c.priority, c.status, c.local_folder_path, c.drive_folder_id, c.notes, c.created_at, c.updated_at, t.due_date FROM companies c LEFT JOIN tasks t ON t.company_id = c.id ORDER BY c.created_at DESC")?;
     let rows = stmt.query_map([], |row| {
         Ok(Company {
             id: row.get(0)?,
@@ -84,6 +80,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Company>> {
             notes: row.get(8)?,
             created_at: row.get(9)?,
             updated_at: row.get(10)?,
+            due_date: row.get(11)?,
         })
     })?;
 

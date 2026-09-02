@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, ChangeEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCompany, useCompanyHistory, useUpdateCompanyStatus, useDeleteCompany, useUpdateCompany } from '../queries/useCompanies';
 import { CompanyFormModal } from '../components/CompanyFormModal';
 import { getNextAction, formatStatus } from '../utils/companyUtils';
+import { selectFolder } from '../services/apiClient';
+import { isBusinessDateOverdue } from '../utils/date';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ArrowLeft, FolderOpen, Calendar, Clock, Edit2, Trash2, ArrowRight, Building2, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-shell';
 
 const STATUS_OPTIONS = [
   'NOVA',
@@ -23,7 +24,7 @@ const STATUS_OPTIONS = [
 export function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: company, isLoading } = useCompany(id!);
+  const { data: company, isLoading, isError } = useCompany(id!);
   const { data: history } = useCompanyHistory(id!);
   const updateStatus = useUpdateCompanyStatus();
   const updateCompany = useUpdateCompany();
@@ -31,11 +32,39 @@ export function CompanyDetail() {
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   
-  if (isLoading || !company) {
-    return <div className="p-8 flex justify-center text-indigo-500"><Building2 className="animate-spin" size={32} /></div>;
+  if (isLoading) {
+    return (
+      <div className="p-8 flex justify-center text-indigo-500">
+        <Building2 className="animate-spin" size={32} />
+      </div>
+    );
   }
 
-  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  if (isError) {
+    return (
+      <div className="p-8 max-w-5xl mx-auto text-center">
+        <h2 className="text-xl font-bold text-red-500 mb-2">Erro ao carregar os dados</h2>
+        <p className="text-neutral-400 mb-4">Ocorreu um erro ao buscar os detalhes da demanda.</p>
+        <button onClick={() => navigate('/empresas')} className="text-indigo-400 hover:text-indigo-300">
+          Voltar para a lista
+        </button>
+      </div>
+    );
+  }
+
+  if (!company) {
+    return (
+      <div className="p-8 max-w-5xl mx-auto text-center">
+        <h2 className="text-xl font-bold text-neutral-300 mb-2">Demanda não encontrada</h2>
+        <p className="text-neutral-400 mb-4">A demanda que você está procurando não existe ou foi excluída.</p>
+        <button onClick={() => navigate('/empresas')} className="text-indigo-400 hover:text-indigo-300">
+          Voltar para a lista
+        </button>
+      </div>
+    );
+  }
+
+  const handleStatusChange = (e: ChangeEvent<HTMLSelectElement>) => {
     updateStatus.mutate({ id: company.id, status: e.target.value }, {
       onSuccess: () => toast.success('Status atualizado')
     });
@@ -55,18 +84,19 @@ export function CompanyDetail() {
       deleteCompany.mutate(company.id, {
         onSuccess: () => {
           toast.success('Demanda excluída');
-          navigate('/companies');
+          navigate('/empresas');
         }
       });
     }
   };
 
   const openLocalFolder = async () => {
-    if (!company.local_folder_path) return;
+    if (!company.local_folder_path || company.local_folder_path.trim() === '') return;
     try {
-      await open(company.local_folder_path);
+      await invoke('open_local_folder', { path: company.local_folder_path });
     } catch (err) {
-      toast.error('Erro ao abrir pasta: ' + String(err));
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      toast.error(errorMsg, { duration: 5000 });
     }
   };
 
@@ -80,10 +110,12 @@ export function CompanyDetail() {
     }
   };
 
+  const isOverdue = !!company.due_date && company.status !== 'CONCLUIDA' && isBusinessDateOverdue(company.due_date);
+
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
       <button 
-        onClick={() => navigate('/companies')}
+        onClick={() => navigate('/empresas')}
         className="flex items-center gap-2 text-neutral-400 hover:text-white transition-colors"
       >
         <ArrowLeft size={20} />
@@ -129,7 +161,21 @@ export function CompanyDetail() {
                   {format(parseISO(company.entry_date), "dd/MM/yyyy")}
                 </p>
               </div>
-              <div className="bg-neutral-800/50 p-4 rounded-lg border border-neutral-800 col-span-2">
+              
+              <div className="bg-neutral-800/50 p-4 rounded-lg border border-neutral-800">
+                <p className="text-xs text-neutral-500 mb-1">Prazo</p>
+                <div className="flex flex-col items-start gap-1.5">
+                  <p className="text-sm text-white font-medium">
+                    {company.due_date ? format(parseISO(company.due_date), "dd/MM/yyyy") : '---'}
+                  </p>
+                  {isOverdue && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded-full">
+                      Atrasada
+                    </span>
+                  )}
+                </div>
+              </div>
+<div className="bg-neutral-800/50 p-4 rounded-lg border border-neutral-800 col-span-2 md:col-span-1">
                 <p className="text-xs text-neutral-500 mb-1">Status Atual</p>
                 <select 
                   value={company.status}
@@ -169,21 +215,68 @@ export function CompanyDetail() {
 
         {/* Sidebar */}
         <div className="w-full md:w-80 space-y-6">
-          {company.local_folder_path && (
-            <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Arquivos</h3>
-              <button 
-                onClick={openLocalFolder}
-                className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2.5 rounded-lg transition-colors border border-neutral-700"
-              >
-                <FolderOpen size={18} />
-                Abrir Pasta Local
-              </button>
-              <p className="text-xs text-neutral-500 mt-2 text-center break-all">
-                {company.local_folder_path}
-              </p>
-            </div>
-          )}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Arquivos</h3>
+            
+            {company.local_folder_path ? (
+              <div className="space-y-3">
+                <button 
+                  onClick={openLocalFolder}
+                  className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2.5 rounded-lg transition-colors border border-neutral-700"
+                >
+                  <FolderOpen size={18} />
+                  Abrir Pasta Local
+                </button>
+                <p className="text-xs text-neutral-500 text-center break-all">
+                  {company.local_folder_path}
+                </p>
+                <div className="flex justify-center gap-2 pt-2">
+                  <button
+                    onClick={async () => {
+                      const selected = await selectFolder();
+                      if (selected) {
+                        updateCompany.mutate({ ...company, local_folder_path: selected }, {
+                          onSuccess: () => toast.success('Pasta atualizada')
+                        });
+                      }
+                    }}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    Alterar pasta
+                  </button>
+                  <span className="text-neutral-700">•</span>
+                  <button
+                    onClick={() => {
+                      updateCompany.mutate({ ...company, local_folder_path: null }, {
+                        onSuccess: () => toast.success('Pasta removida')
+                      });
+                    }}
+                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center space-y-3">
+                <p className="text-sm text-neutral-500">Nenhuma pasta local definida</p>
+                <button
+                  onClick={async () => {
+                    const selected = await selectFolder();
+                    if (selected) {
+                      updateCompany.mutate({ ...company, local_folder_path: selected }, {
+                        onSuccess: () => toast.success('Pasta definida')
+                      });
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-4 py-2.5 rounded-lg transition-colors border border-neutral-700"
+                >
+                  <FolderOpen size={18} />
+                  Escolher pasta
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Histórico</h3>

@@ -4,13 +4,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X } from 'lucide-react';
 import { Priority } from '../types';
+import { getBusinessDateToday } from '../utils/date';
+import { selectFolder } from '../services/apiClient';
 
 const companySchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
   description: z.string().optional(),
   entry_date: z.string().min(1, 'Data de entrada é obrigatória'),
   priority: z.enum(['BAIXA', 'NORMAL', 'ALTA', 'URGENTE'] as const),
-  local_folder_path: z.string().optional(),
+  due_date: z.string().optional().nullable().transform(v => v === "" ? null : v),
+  local_folder_path: z.string().optional().nullable().transform(v => v === "" ? null : v),
   notes: z.string().optional(),
 });
 
@@ -25,13 +28,14 @@ interface Props {
 }
 
 export function CompanyFormModal({ isOpen, onClose, onSubmit, isLoading, initialData }: Props) {
-  const { register, handleSubmit, formState: { errors } } = useForm<CompanyFormData>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
     defaultValues: initialData || {
       name: '',
       description: '',
-      entry_date: new Date().toISOString().split('T')[0],
+      entry_date: getBusinessDateToday(),
       priority: 'NORMAL',
+      due_date: '',
       local_folder_path: '',
       notes: '',
     },
@@ -95,13 +99,47 @@ export function CompanyFormModal({ isOpen, onClose, onSubmit, isLoading, initial
             </div>
           </div>
 
+          
+          <div>
+            <label className="block text-sm font-medium text-neutral-300 mb-1">Prazo (opcional)</label>
+            <input
+              type="date"
+              {...register('due_date')}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-neutral-300 mb-1">Pasta local (opcional)</label>
-            <input
-              {...register('local_folder_path')}
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500 transition-colors"
-              placeholder="Ex: C:/Projetos/Empresa"
-            />
+            <div className="flex gap-2">
+              <input
+                {...register('local_folder_path')}
+                readOnly
+                className="flex-1 bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-400 outline-none cursor-not-allowed"
+                placeholder="Nenhuma pasta selecionada"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const selected = await selectFolder();
+                  if (selected) {
+                    setValue('local_folder_path', selected, { shouldDirty: true });
+                  }
+                }}
+                className="px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 rounded-lg transition-colors whitespace-nowrap"
+              >
+                Escolher pasta
+              </button>
+              {watch('local_folder_path') && (
+                <button
+                  type="button"
+                  onClick={() => setValue('local_folder_path', '', { shouldDirty: true })}
+                  className="px-3 py-2 bg-neutral-800 hover:bg-red-900/30 border border-neutral-700 text-red-400 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
           </div>
 
           <div>

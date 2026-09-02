@@ -20,3 +20,11 @@ pub fn update_status_by_company(conn: &Connection, company_id: &str, status: &st
     )?;
     Ok(())
 }
+
+pub fn update_due_date_by_company(conn: &Connection, company_id: &str, due_date: Option<&str>) -> Result<()> {
+    conn.execute(
+        "UPDATE tasks SET due_date = ?1 WHERE company_id = ?2",
+        params![due_date, company_id],
+    )?;
+    Ok(())
+}

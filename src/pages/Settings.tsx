@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { useSettings, useSaveSettings } from '@/queries/useSettings';
 import { selectFolder } from '@/services/apiClient';
 import { SettingsData } from '@/services/settingsApi';
+import { GoogleDriveSettings } from '@/components/GoogleDriveSettings';
 import { FolderOpen, Save, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -148,21 +149,10 @@ export function Settings() {
 
         <Card>
           <CardHeader>
-            <h3 className="font-semibold text-zinc-100">Integrações Futuras</h3>
+            <h3 className="font-semibold text-zinc-100">Google Drive</h3>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-lg">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-zinc-300">Google Drive</span>
-                <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-1 rounded">V1</span>
-              </div>
-            </div>
-            <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-lg">
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-zinc-300">CorelDRAW</span>
-                <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-1 rounded">V2</span>
-              </div>
-            </div>
+            <GoogleDriveSettings />
           </CardContent>
         </Card>
       </div>

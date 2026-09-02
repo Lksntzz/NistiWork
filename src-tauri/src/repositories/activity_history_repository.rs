@@ -34,3 +34,11 @@ pub fn list_by_entity(conn: &Connection, entity_name: &str, entity_id: &str) -> 
     }
     Ok(history)
 }
+
+pub fn delete_by_entity(conn: &Connection, entity_name: &str, entity_id: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM activity_history WHERE entity_name = ?1 AND entity_id = ?2",
+        params![entity_name, entity_id],
+    )?;
+    Ok(())
+}

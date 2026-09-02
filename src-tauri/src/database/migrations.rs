@@ -49,6 +49,31 @@ lazy_static! {
                 timestamp TEXT NOT NULL
             );"
         ),
+        // V3: Garantir que s exista 1 task vinculada por empresa
+        M::up(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_company_id 
+             ON tasks (company_id) 
+             WHERE company_id IS NOT NULL;"
+        ),
+        // V4: Integração Google Drive (Etapa 4)
+        M::up(
+            "CREATE TABLE IF NOT EXISTS google_drive_connections (
+                id TEXT PRIMARY KEY,
+                account_subject TEXT NOT NULL,
+                account_email TEXT NOT NULL,
+                drive_id TEXT NULL,
+                monitored_folder_id TEXT NULL,
+                monitored_folder_name TEXT NULL,
+                last_change_token TEXT NULL,
+                last_sync_at TEXT NULL,
+                last_error TEXT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_drive_folder_id 
+             ON companies(drive_folder_id) 
+             WHERE drive_folder_id IS NOT NULL;"
+        ),
     ]);
 }
 
