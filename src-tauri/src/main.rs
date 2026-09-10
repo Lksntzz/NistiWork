@@ -27,50 +27,22 @@ fn main() {
             let conn = establish_connection(db_path);
             let state = integrations::google_drive::state::GoogleDriveRuntimeState::new();
             
-            // Hidratação do estado do Google Drive
-            let conn_res = conn.query_row(
-                "SELECT id FROM google_drive_connections LIMIT 1",
-                [],
-                |row| row.get::<_, String>(0)
-            );
-            
-            use rusqlite::OptionalExtension;
-            use keyring::Error as KeyringError;
+            // Local-only hydration: no Google request is needed at startup.
+            use integrations::google_drive::{connection_store, credentials};
             use integrations::google_drive::state::GoogleDriveConnectionStatus;
-
-            match conn_res.optional() {
+            let status = match connection_store::current_id(&conn) {
                 Ok(Some(id)) => {
-                    match keyring::Entry::new(integrations::google_drive::token_manager::SERVICE_NAME, &id) {
-                        Ok(entry) => {
-                            match entry.get_password() {
-                                Ok(_) => {
-                                    *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::CONNECTED;
-                                    println!("Google Drive hydration: CONNECTED (local credential found). id={}", id);
-                                }
-                                Err(KeyringError::NoEntry) => {
-                                    *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::REAUTH_REQUIRED;
-                                    println!("Google Drive hydration: REAUTH_REQUIRED (no keyring entry). id={}", id);
-                                }
-                                Err(e) => {
-                                    *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::ERROR(format!("Falha ao acessar Keyring local: {}", e));
-                                    println!("Google Drive hydration: ERROR ({:?}). id={}", e, id);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::ERROR(format!("Falha ao instanciar Keyring: {}", e));
-                            println!("Google Drive hydration: KEYRING INIT ERROR ({:?}). id={}", e, id);
-                        }
+                    state.token_manager.activate(&id);
+                    match credentials::read(&id) {
+                        Ok(Some(_)) => GoogleDriveConnectionStatus::CONNECTED,
+                        Ok(None) => GoogleDriveConnectionStatus::REAUTH_REQUIRED,
+                        Err(message) => GoogleDriveConnectionStatus::ERROR(message),
                     }
                 }
-                Ok(None) => {
-                    println!("Google Drive hydration: DISCONNECTED (no db record).");
-                }
-                Err(e) => {
-                    *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::ERROR(format!("Falha ao ler banco local: {}", e));
-                    println!("Google Drive hydration: DB ERROR ({:?}).", e);
-                }
-            }
+                Ok(None) => GoogleDriveConnectionStatus::DISCONNECTED,
+                Err(_) => GoogleDriveConnectionStatus::ERROR("Não foi possível ler a conexão no banco local.".to_string()),
+            };
+            *state.connection_status.lock().unwrap() = status;
 
             app.manage(DbState {
                 db: Mutex::new(conn),

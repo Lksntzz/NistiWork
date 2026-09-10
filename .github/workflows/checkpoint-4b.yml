@@ -1,0 +1,29 @@
+name: Checkpoint 4B checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - run: rustup default stable
+      - run: cargo check --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Confirm Windows credential backend
+        shell: pwsh
+        run: |
+          $features = cargo tree --manifest-path src-tauri/Cargo.toml -e features -i keyring
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $features
+          if (($features -join "`n") -notmatch 'windows-native') { throw 'Missing windows-native feature' }

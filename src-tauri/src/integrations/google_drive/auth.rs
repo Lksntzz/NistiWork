@@ -21,12 +21,6 @@ pub struct UserInfo {
     pub email: String,
 }
 
-#[derive(Deserialize)]
-struct GoogleErrorResponse {
-    error: Option<String>,
-    error_description: Option<String>,
-}
-
 use super::state::GoogleOAuthConfig;
 
 pub struct OAuthFlow {
@@ -76,14 +70,21 @@ impl OAuthFlow {
             .append_pair("code_challenge", &challenge)
             .append_pair("code_challenge_method", "S256");
 
-        open::that(auth_url.as_str()).map_err(|e| format!("Falha ao abrir navegador: {}", e))?;
+        open::that(auth_url.as_str()).map_err(|_| "Não foi possível abrir o navegador para autorização.".to_string())?;
 
         let accept_future = async {
             let (mut socket, _) = listener.accept().await.map_err(|e| e.to_string())?;
-            let mut buf = [0; 4096];
-            let n = socket.read(&mut buf).await.map_err(|e| e.to_string())?;
-            let request = String::from_utf8_lossy(&buf[..n]);
-            
+            let mut request_bytes = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !request_bytes.windows(4).any(|part| part == b"\r\n\r\n") {
+                let n = socket.read(&mut buf).await.map_err(|_| "Falha ao ler retorno OAuth.".to_string())?;
+                if n == 0 || request_bytes.len() + n > 8192 {
+                    return Err("Retorno OAuth incompleto ou muito grande.".to_string());
+                }
+                request_bytes.extend_from_slice(&buf[..n]);
+            }
+            let request = String::from_utf8_lossy(&request_bytes);
+
             let mut code = String::new();
             let mut ret_state = String::new();
 
@@ -100,14 +101,18 @@ impl OAuthFlow {
                 }
             }
 
-            let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<html><body><h2>Conexo concluida. Voce pode fechar esta janela.</h2><script>window.close();</script></body></html>";
+            let valid = ret_state == state && !code.is_empty();
+            let response = if valid {
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<html><body><h2>Autorização recebida. Volte ao aplicativo para verificar a conexão.</h2></body></html>"
+            } else {
+                "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<html><body><h2>Autorização não concluída. Volte ao aplicativo.</h2></body></html>"
+            };
             let _ = socket.write_all(response.as_bytes()).await;
-
             if ret_state != state {
-                return Err("State invlido (possvel CSRF)".to_string());
+                return Err("Retorno de autorização inválido.".to_string());
             }
             if code.is_empty() {
-                return Err("Autorizao negada pelo usurio".to_string());
+                return Err("Autorização cancelada ou negada.".to_string());
             }
 
             Ok(code)
@@ -130,6 +135,7 @@ impl OAuthFlow {
 
         let token_res = client.post("https://oauth2.googleapis.com/token")
             .form(&params)
+            .timeout(Duration::from_secs(15))
             .send()
             .await
             .map_err(|e| format!("Erro de rede ao buscar token: {}", e))?;
@@ -137,12 +143,7 @@ impl OAuthFlow {
         let token_status = token_res.status();
         if !token_status.is_success() {
             let error_text = token_res.text().await.unwrap_or_default();
-            let err_json: Result<GoogleErrorResponse, _> = serde_json::from_str(&error_text);
-            if let Ok(g_err) = err_json {
-                return Err(format!("Google token endpoint retornou HTTP {}: {:?} - {:?}", 
-                    token_status, g_err.error, g_err.error_description));
-            }
-            return Err(format!("Google token endpoint retornou HTTP {}: erro desconhecido", token_status));
+            return Err(super::token_manager::token_error(token_status.as_u16(), &error_text));
         }
 
         let token_data: TokenResponse = token_res.json().await
@@ -150,19 +151,14 @@ impl OAuthFlow {
 
         let userinfo_res = client.get("https://openidconnect.googleapis.com/v1/userinfo")
             .bearer_auth(&token_data.access_token)
+            .timeout(Duration::from_secs(15))
             .send()
             .await
             .map_err(|e| format!("Erro de rede ao buscar UserInfo: {}", e))?;
             
         let userinfo_status = userinfo_res.status();
         if !userinfo_status.is_success() {
-            let error_text = userinfo_res.text().await.unwrap_or_default();
-            let err_json: Result<GoogleErrorResponse, _> = serde_json::from_str(&error_text);
-            if let Ok(g_err) = err_json {
-                return Err(format!("Google UserInfo endpoint retornou HTTP {}: {:?} - {:?}", 
-                    userinfo_status, g_err.error, g_err.error_description));
-            }
-            return Err(format!("Google UserInfo endpoint retornou HTTP {}: erro desconhecido", userinfo_status));
+            return Err(format!("Não foi possível consultar a conta Google (HTTP {}).", userinfo_status));
         }
 
         let userinfo: UserInfo = userinfo_res.json().await
