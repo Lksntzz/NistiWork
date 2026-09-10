@@ -22,6 +22,7 @@ pub struct GoogleOAuthConfig {
 pub struct GoogleDriveRuntimeState {
     pub connection_status: Mutex<GoogleDriveConnectionStatus>,
     pub sync_in_progress: Mutex<bool>,
+    pub auth_operation: tokio::sync::Mutex<()>,
     pub oauth_config: Option<GoogleOAuthConfig>,
     pub token_manager: Arc<TokenManager>,
 }
@@ -52,6 +53,7 @@ impl GoogleDriveRuntimeState {
         Self {
             connection_status: Mutex::new(GoogleDriveConnectionStatus::DISCONNECTED),
             sync_in_progress: Mutex::new(false),
+            auth_operation: tokio::sync::Mutex::new(()),
             oauth_config,
             token_manager: Arc::new(TokenManager::new(tm_config)),
         }

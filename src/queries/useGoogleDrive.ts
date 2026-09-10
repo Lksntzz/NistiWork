@@ -2,11 +2,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import toast from "react-hot-toast";
 
+export interface DriveStatus {
+  status: "DISCONNECTED" | "CONNECTING" | "CONNECTED" | "SYNCING" | "REAUTH_REQUIRED" | "ERROR";
+  message: string | null;
+}
+
 export function useDriveStatus() {
   return useQuery({
     queryKey: ["drive-status"],
     queryFn: async () => {
-      return await invoke<string>("get_drive_status");
+      return await invoke<DriveStatus>("get_drive_status");
     },
     refetchInterval: 5000 // Polling simples p/ atualizar status
   });
@@ -35,10 +40,11 @@ export function useDisconnectDrive() {
   
   return useMutation({
     mutationFn: async () => {
-      await invoke("disconnect_google_drive");
+      return await invoke<string | null>("disconnect_google_drive");
     },
-    onSuccess: () => {
-      toast.success("Google Drive desconectado!");
+    onSuccess: (warning) => {
+      if (warning) toast(warning);
+      else toast.success("Google Drive desconectado!");
       queryClient.invalidateQueries({ queryKey: ["drive-status"] });
     },
     onError: (error) => {

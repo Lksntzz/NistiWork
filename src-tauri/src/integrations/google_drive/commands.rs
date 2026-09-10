@@ -1,175 +1,154 @@
 use tauri::State;
 use super::state::{GoogleDriveRuntimeState, GoogleDriveConnectionStatus};
-use super::auth::OAuthFlow;
+use super::{auth::OAuthFlow, connection_store, credentials};
 use crate::database::connection::DbState;
-use chrono::Utc;
-use keyring::Entry;
-use rusqlite::params;
 use uuid::Uuid;
 
+#[derive(serde::Serialize)]
+pub struct DriveStatus {
+    status: &'static str,
+    message: Option<String>,
+}
+
 #[tauri::command]
-pub fn get_drive_status(state: State<'_, GoogleDriveRuntimeState>) -> Result<String, String> {
+pub fn get_drive_status(state: State<'_, GoogleDriveRuntimeState>) -> Result<DriveStatus, String> {
     let status = state.connection_status.lock().unwrap();
-    Ok(format!("{:?}", *status))
+    let (code, message) = match &*status {
+        GoogleDriveConnectionStatus::DISCONNECTED => ("DISCONNECTED", None),
+        GoogleDriveConnectionStatus::CONNECTING => ("CONNECTING", None),
+        GoogleDriveConnectionStatus::CONNECTED => ("CONNECTED", None),
+        GoogleDriveConnectionStatus::SYNCING => ("SYNCING", None),
+        GoogleDriveConnectionStatus::REAUTH_REQUIRED => ("REAUTH_REQUIRED", Some("A credencial local está ausente ou precisa de nova autorização.".to_string())),
+        GoogleDriveConnectionStatus::ERROR(message) => ("ERROR", Some(message.clone())),
+    };
+    Ok(DriveStatus { status: code, message })
+}
+
+// Restore UI state on every early return, including cancellation of the future.
+// This owns a status value, never a MutexGuard across await.
+struct Connecting<'a> {
+    state: &'a GoogleDriveRuntimeState,
+    previous: Option<GoogleDriveConnectionStatus>,
+}
+
+impl<'a> Connecting<'a> {
+    fn begin(state: &'a GoogleDriveRuntimeState) -> Self {
+        let previous = std::mem::replace(
+            &mut *state.connection_status.lock().unwrap(),
+            GoogleDriveConnectionStatus::CONNECTING,
+        );
+        Self { state, previous: Some(previous) }
+    }
+
+    fn complete(&mut self) {
+        *self.state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::CONNECTED;
+        self.previous = None;
+    }
+}
+
+impl Drop for Connecting<'_> {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            *self.state.connection_status.lock().unwrap() = previous;
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn connect_google_drive(
     state: State<'_, GoogleDriveRuntimeState>,
-    db_state: State<'_, DbState>
+    db_state: State<'_, DbState>,
 ) -> Result<(), String> {
-    let previous_status = {
-        let mut status = state.connection_status.lock().unwrap();
-        if *status == GoogleDriveConnectionStatus::CONNECTING {
-            return Err("Conexão já em andamento".to_string());
-        }
-        let old = status.clone();
-        *status = GoogleDriveConnectionStatus::CONNECTING;
-        old
+    // No queued login may silently reconnect after a logout.
+    let _operation = state.auth_operation.try_lock()
+        .map_err(|_| "Há uma operação de conexão em andamento. Aguarde.".to_string())?;
+    let config = state.oauth_config.clone()
+        .ok_or_else(|| "Google Drive não configurado no build.".to_string())?;
+    let mut progress = Connecting::begin(&state);
+    let (token_data, userinfo) = OAuthFlow::new(config).authenticate().await?;
+    let refresh_token = token_data.refresh_token
+        .filter(|token| !token.is_empty())
+        .ok_or_else(|| "Google não retornou uma credencial de acesso offline. Autorize novamente.".to_string())?;
+    if token_data.access_token.is_empty() || token_data.expires_in <= 0 || userinfo.sub.is_empty() {
+        return Err("Google retornou uma resposta de autenticação inválida.".to_string());
+    }
+    let new_id = Uuid::new_v4().to_string();
+    credentials::save_verified(&new_id, &refresh_token)?;
+    // There is no await between credential creation and commit/rollback.
+    let result = {
+        let mut conn = db_state.db.lock().unwrap();
+        connection_store::replace(&mut conn, &new_id, &userinfo.sub, &userinfo.email)
     };
-
-    let oauth_config = match state.oauth_config.clone() {
-        Some(config) => config,
-        None => {
-            *state.connection_status.lock().unwrap() = previous_status;
-            return Err("Google Drive não configurado no build (ausência de client_id ou client_secret)".to_string());
-        }
-    };
-
-    let auth_flow = OAuthFlow::new(oauth_config);
-    let new_connection_id = Uuid::new_v4().to_string();
-
-    let auth_result = auth_flow.authenticate().await;
-
-    match auth_result {
-        Ok((token_data, userinfo)) => {
-            if let Some(refresh_token) = token_data.refresh_token {
-                let entry_res = Entry::new(super::token_manager::SERVICE_NAME, &new_connection_id);
-                if let Err(e) = entry_res {
-                    *state.connection_status.lock().unwrap() = previous_status;
-                    return Err(format!("Falha ao instanciar Keyring: {}", e));
-                }
-                let entry = entry_res.unwrap();
-                
-                if let Err(e) = entry.set_password(&refresh_token) {
-                    *state.connection_status.lock().unwrap() = previous_status;
-                    return Err(format!("Falha ao salvar senha no Keyring: {}", e));
-                }
-
-                // Verify read-after-write for diagnostic purposes
-                if let Err(e) = entry.get_password() {
-                    let _ = entry.delete_credential(); // Rollback
-                    *state.connection_status.lock().unwrap() = previous_status;
-                    return Err(format!("Falha ao confirmar gravação no Keyring: {:?}", e));
-                }
-                
-                // Salvar no SQLite
-                let db_res: Result<Option<String>, String> = (|| -> Result<Option<String>, String> {
-                    let mut conn = db_state.db.lock().unwrap();
-                    let tx = conn.transaction().map_err(|e| e.to_string())?;
-                    
-                    // Se houver conexão antiga, apagar
-                    let old_id: Option<String> = tx.query_row(
-                        "SELECT id FROM google_drive_connections LIMIT 1",
-                        [],
-                        |row| row.get(0)
-                    ).ok();
-
-                    let now = Utc::now().to_rfc3339();
-                    tx.execute("DELETE FROM google_drive_connections", [])
-                        .map_err(|e| e.to_string())?;
-                    
-                    tx.execute(
-                        "INSERT INTO google_drive_connections (id, account_subject, account_email, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        params![new_connection_id, userinfo.sub, userinfo.email, now, now]
-                    ).map_err(|e| e.to_string())?;
-
-                    tx.commit().map_err(|e| e.to_string())?;
-                    Ok(old_id)
-                })();
-
-                match db_res {
-                    Ok(old_id_opt) => {
-                        // Limpar a credencial antiga só depois do commit do SQLite!
-                        if let Some(old) = old_id_opt {
-                            if old != new_connection_id {
-                                if let Ok(old_entry) = Entry::new(super::token_manager::SERVICE_NAME, &old) {
-                                    let _ = old_entry.delete_credential();
-                                }
-                            }
-                        }
-
-                        // Set the new access token in TokenManager cache
-                        if let Some(access_token) = token_data.access_token {
-                            let expires_in = token_data.expires_in.unwrap_or(3599);
-                            state.token_manager.set_token(&new_connection_id, access_token, expires_in);
-                        }
-                        
-                        println!("Google Drive connected: id={}", new_connection_id);
-                        *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::CONNECTED;
-                        
-                        Ok(())
-                    }
-                    Err(e) => {
-                        // Rollback no Keyring
-                        let _ = entry.delete_credential();
-                        *state.connection_status.lock().unwrap() = previous_status;
-                        Err(format!("Falha ao salvar no banco: {}", e))
-                    }
-                }
-            } else {
-                *state.connection_status.lock().unwrap() = previous_status;
-                Err("Google não retornou Refresh Token (garanta access_type=offline sem prompt duplicado ou force consentimento)".to_string())
+    let old_id = match result {
+        Ok(id) => id,
+        Err(_) => {
+            if credentials::remove(&new_id).is_err() {
+                eprintln!("Google Drive: falha ao limpar nova credencial após rollback SQLite.");
             }
+            return Err("Não foi possível salvar a conexão no banco local. A conexão anterior foi preservada.".to_string());
         }
-        Err(e) => {
-            *state.connection_status.lock().unwrap() = previous_status;
-            Err(e)
+    };
+    // TokenResponse has String/i64 fields, not Options.
+    state.token_manager.set_token(&new_id, token_data.access_token, token_data.expires_in);
+    progress.complete();
+    if let Some(old_id) = old_id {
+        if old_id != new_id && credentials::remove(&old_id).is_err() {
+            eprintln!("Google Drive: conexão salva; falha ao remover credencial anterior.");
         }
     }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn disconnect_google_drive(
     state: State<'_, GoogleDriveRuntimeState>,
-    db_state: State<'_, DbState>
-) -> Result<(), String> {
-    let old_id: Option<String> = {
-        let conn = db_state.db.lock().unwrap();
-        conn.query_row("SELECT id FROM google_drive_connections LIMIT 1", [], |row| row.get(0)).ok()
+    db_state: State<'_, DbState>,
+) -> Result<Option<String>, String> {
+    let _operation = state.auth_operation.try_lock()
+        .map_err(|_| "Há uma operação de conexão em andamento. Aguarde.".to_string())?;
+    // Commit the local logout first. A DB failure leaves the old session intact.
+    let old_id = {
+        let mut conn = db_state.db.lock().unwrap();
+        connection_store::disconnect(&mut conn)
+            .map_err(|_| "Não foi possível desconectar no banco local. Tente novamente.".to_string())?
     };
-
-    if let Some(old) = old_id {
-        // Clear in-memory token
-        state.token_manager.clear();
-
-        // Optional Revocation Request
-        let oauth_config = state.oauth_config.clone();
-        if let Ok(entry) = Entry::new(super::token_manager::SERVICE_NAME, &old) {
-            if let Ok(refresh_token) = entry.get_password() {
-                // Fire and forget remote revocation, bounded to a quick timeout
-                let client = reqwest::Client::new();
-                let _ = client.post("https://oauth2.googleapis.com/revoke")
-                    .form(&[("token", refresh_token)])
-                    .timeout(std::time::Duration::from_secs(5))
-                    .send()
-                    .await;
-            }
-            if let Err(e) = entry.delete_credential() {
-                println!("Erro ao apagar keyring local (pode já estar vazio): {}", e);
-            }
-        }
-
-        // Remover SQLite
-        {
-            let mut conn = db_state.db.lock().unwrap();
-            let tx = conn.transaction().map_err(|e| e.to_string())?;
-            tx.execute("DELETE FROM google_drive_connections", []).map_err(|e| e.to_string())?;
-            tx.commit().map_err(|e| e.to_string())?;
-        }
-        println!("Google Drive disconnected: id={}", old);
-    }
-    
+    state.token_manager.clear();
     *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::DISCONNECTED;
-    Ok(())
+    let mut warning = None;
+    if let Some(old_id) = old_id {
+        let refresh_token = credentials::read(&old_id).ok().flatten();
+        if let Err(message) = credentials::remove(&old_id) {
+            warning = Some(format!("Desconectado no aplicativo. {}", message));
+        }
+        // Keep the operation lock until this bounded attempt ends, so an old
+        // grant revocation cannot race with a new consent for the same account.
+        if let Some(refresh_token) = refresh_token {
+            let _ = reqwest::Client::new().post("https://oauth2.googleapis.com/revoke")
+                .form(&[("token", refresh_token)])
+                .timeout(std::time::Duration::from_secs(5)).send().await;
+        }
+    }
+    Ok(warning)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_or_cancelled_connect_restores_previous_status() {
+        let state = GoogleDriveRuntimeState::new();
+        *state.connection_status.lock().unwrap() = GoogleDriveConnectionStatus::CONNECTED;
+        { let _progress = Connecting::begin(&state); }
+        assert_eq!(*state.connection_status.lock().unwrap(), GoogleDriveConnectionStatus::CONNECTED);
+    }
+
+    #[tokio::test]
+    async fn auth_operations_do_not_overlap() {
+        let state = GoogleDriveRuntimeState::new();
+        let operation = state.auth_operation.try_lock().unwrap();
+        assert!(state.auth_operation.try_lock().is_err());
+        drop(operation);
+        assert!(state.auth_operation.try_lock().is_ok());
+    }
 }
