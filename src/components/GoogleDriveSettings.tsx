@@ -13,13 +13,14 @@ export function GoogleDriveSettings() {
   const isConnected = status === "CONNECTED" || status === "SYNCING";
   const needsReauth = status === "REAUTH_REQUIRED";
   const isConnecting = status === "CONNECTING";
+  const isError = status?.startsWith("ERROR");
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-lg">
-        <div>
+        <div className="flex-1 mr-4">
           <h4 className="font-medium text-zinc-300">Status</h4>
-          <p className="text-sm text-zinc-500">{status}</p>
+          <p className="text-sm text-zinc-500 line-clamp-2">{status}</p>
         </div>
         
         {(!isConnected && !needsReauth && !isConnecting) && (
