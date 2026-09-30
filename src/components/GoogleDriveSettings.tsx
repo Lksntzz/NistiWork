@@ -1,4 +1,5 @@
 import { ActionButton, type ActionState } from '@/components/ui/ActionButton';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useDriveStatus, useConnectDrive, useDisconnectDrive } from '@/queries/useGoogleDrive';
 import { AlertCircle, CheckCircle2, Cloud, RefreshCw, Unplug } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -10,7 +11,18 @@ export function GoogleDriveSettings() {
   const reduceMotion = useReducedMotion();
 
   if (isLoading) {
-    return <div className="text-zinc-500 text-sm">Carregando status...</div>;
+    return (
+      <div className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950 p-4" aria-label="Carregando status do Google Drive">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-3 w-28" />
+          </div>
+        </div>
+        <Skeleton className="h-9 w-40" />
+      </div>
+    );
   }
 
   const isConnected = status === 'CONNECTED' || status === 'SYNCING';

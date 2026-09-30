@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { ActionButton, type ActionState } from '@/components/ui/ActionButton';
 import { useSettings, useSaveSettings } from '@/queries/useSettings';
 import { selectFolder } from '@/services/apiClient';
@@ -66,8 +67,28 @@ export function Settings() {
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-zinc-500">Carregando configurações...</p>
+      <div className="space-y-6 pb-20" aria-label="Carregando configurações">
+        <div>
+          <Skeleton className="h-9 w-52" />
+          <Skeleton className="mt-3 h-4 w-80" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {[0, 1].map((card) => (
+            <div key={card} className="rounded-xl border border-zinc-800 bg-zinc-900">
+              <div className="border-b border-zinc-800/50 px-6 py-4">
+                <Skeleton className="h-5 w-28" />
+              </div>
+              <div className="space-y-6 p-6">
+                {[0, 1, 2].map((row) => (
+                  <div key={row} className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
