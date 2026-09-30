@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, Check, LoaderCircle } from 'lucide-react';
 import { cn } from '@/utils/cn';
@@ -11,7 +11,7 @@ type ActionButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children
   loadingLabel?: string;
   successLabel?: string;
   errorLabel?: string;
-  idleIcon?: React.ReactNode;
+  idleIcon?: ReactNode;
 };
 
 export function ActionButton({
