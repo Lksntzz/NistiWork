@@ -1,4 +1,4 @@
-import { ActionButton, ActionState } from '@/components/ui/ActionButton';
+import { ActionButton, type ActionState } from '@/components/ui/ActionButton';
 import { useDriveStatus, useConnectDrive, useDisconnectDrive } from '@/queries/useGoogleDrive';
 import { AlertCircle, CheckCircle2, Cloud, RefreshCw, Unplug } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
