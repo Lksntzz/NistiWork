@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { ActionButton, ActionState } from '@/components/ui/ActionButton';
+import { ActionButton, type ActionState } from '@/components/ui/ActionButton';
 import { useSettings, useSaveSettings } from '@/queries/useSettings';
 import { selectFolder } from '@/services/apiClient';
 import { SettingsData } from '@/services/settingsApi';
@@ -205,7 +205,7 @@ export function Settings() {
               saveSettingsMutation.isError
                 ? 'bg-red-600 hover:bg-red-500 text-white px-6 py-2.5'
                 : saveSettingsMutation.isSuccess
-                  ? 'bg-emerald-600 text-white px-6 py-2.5'
+                  ? 'bg-emerald-600 text-white px-6 py-2.5 disabled:opacity-100'
                   : 'bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5'
             }
           />
