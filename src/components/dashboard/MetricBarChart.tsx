@@ -20,24 +20,27 @@ export function MetricBarChart({ data }: MetricBarChartProps) {
     [data]
   );
 
-  const total = useMemo(
-    () => data.reduce((sum, item) => sum + item.value, 0),
-    [data]
-  );
-
   return (
     <div className="space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-zinc-500">Distribuição atual</p>
-          <p className="mt-1 text-2xl font-semibold text-zinc-100 tabular-nums">
-            {total.toLocaleString('pt-BR')}
-          </p>
-        </div>
-        <p className="text-xs text-zinc-600">Total sinalizado</p>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-zinc-500">Comparativo dos indicadores atuais</p>
+        <p className="hidden text-xs text-zinc-600 sm:block">
+          Passe o mouse ou use Tab para ver o valor
+        </p>
       </div>
 
-      <div className="grid h-52 grid-cols-4 items-end gap-3">
+      <div className="relative grid h-52 grid-cols-4 items-end gap-3">
+        <motion.div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-[46px] h-px origin-left bg-zinc-800"
+          initial={reduceMotion ? false : { scaleX: 0, opacity: 0 }}
+          animate={{ scaleX: 1, opacity: 1 }}
+          transition={{
+            duration: reduceMotion ? 0 : 0.45,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+        />
+
         {data.map((item, index) => {
           const height = Math.max((item.value / maxValue) * 100, 8);
           const isActive = activeIndex === index;
@@ -45,7 +48,7 @@ export function MetricBarChart({ data }: MetricBarChartProps) {
           return (
             <div
               key={item.label}
-              className="relative flex h-full min-w-0 flex-col justify-end"
+              className="relative z-10 flex h-full min-w-0 flex-col justify-end"
             >
               <AnimatePresence>
                 {isActive && (
