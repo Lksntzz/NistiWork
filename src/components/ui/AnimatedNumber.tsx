@@ -1,6 +1,11 @@
-import { animate, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from 'motion/react';
 import { useEffect } from 'react';
-import { motion } from 'motion/react';
 
 type AnimatedNumberProps = {
   value: number;
