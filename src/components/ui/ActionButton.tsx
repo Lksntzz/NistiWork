@@ -1,17 +1,21 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AlertCircle, Check, LoaderCircle } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 export type ActionState = 'idle' | 'loading' | 'success' | 'error';
 
-type ActionButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
+type ActionButtonProps = {
   state?: ActionState;
   idleLabel: string;
   loadingLabel?: string;
   successLabel?: string;
   errorLabel?: string;
   idleIcon?: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
+  onClick?: MouseEventHandler<HTMLButtonElement>;
 };
 
 export function ActionButton({
@@ -23,7 +27,8 @@ export function ActionButton({
   idleIcon,
   className,
   disabled,
-  ...props
+  type = 'button',
+  onClick,
 }: ActionButtonProps) {
   const reduceMotion = useReducedMotion();
 
@@ -57,7 +62,8 @@ export function ActionButton({
 
   return (
     <motion.button
-      {...props}
+      type={type}
+      onClick={onClick}
       disabled={disabled || state === 'loading'}
       whileHover={reduceMotion || disabled ? undefined : { y: -1 }}
       whileTap={reduceMotion || disabled ? undefined : { scale: 0.975 }}
