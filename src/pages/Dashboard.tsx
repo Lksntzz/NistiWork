@@ -2,7 +2,6 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { AnimatedNumber } from '@/components/ui/AnimatedNumber';
 import { MetricBarChart } from '@/components/dashboard/MetricBarChart';
-import { ProgressDonut } from '@/components/dashboard/ProgressDonut';
 import { Clock, AlertCircle, PlayCircle, PlusCircle } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
@@ -77,9 +76,6 @@ export function Dashboard() {
     accentClass: metric.chartClass,
   }));
 
-  const totalSignaled = metrics.reduce((sum, metric) => sum + metric.value, 0);
-  const inProgress = metrics.find((metric) => metric.label === 'Em Andamento')?.value ?? 0;
-
   return (
     <motion.div
       className="space-y-8"
@@ -129,41 +125,18 @@ export function Dashboard() {
         })}
       </motion.div>
 
-      <motion.div
-        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
-        variants={containerVariants}
-      >
-        <motion.div className="lg:col-span-2" variants={itemVariants}>
-          <Card className="h-full">
-            <CardContent className="p-6">
-              <div className="mb-5">
-                <h3 className="text-lg font-semibold text-zinc-100">Resumo de demandas</h3>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Comparação dos indicadores atuais do painel.
-                </p>
-              </div>
-              <MetricBarChart data={chartData} />
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card className="h-full">
-            <CardContent className="p-6">
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold text-zinc-100">Em andamento</h3>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Participação no total de itens sinalizados.
-                </p>
-              </div>
-              <ProgressDonut
-                value={inProgress}
-                total={totalSignaled}
-                label="Demandas em andamento"
-              />
-            </CardContent>
-          </Card>
-        </motion.div>
+      <motion.div variants={itemVariants}>
+        <Card>
+          <CardContent className="p-6">
+            <div className="mb-5">
+              <h3 className="text-lg font-semibold text-zinc-100">Resumo de demandas</h3>
+              <p className="mt-1 text-sm text-zinc-500">
+                Comparação visual dos indicadores atuais, sem somar categorias que podem se sobrepor.
+              </p>
+            </div>
+            <MetricBarChart data={chartData} />
+          </CardContent>
+        </Card>
       </motion.div>
 
       <motion.div
