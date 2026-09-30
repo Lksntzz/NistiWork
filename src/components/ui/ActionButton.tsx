@@ -31,6 +31,7 @@ export function ActionButton({
   onClick,
 }: ActionButtonProps) {
   const reduceMotion = useReducedMotion();
+  const isDisabled = disabled || state === 'loading';
 
   const content = {
     idle: { label: idleLabel, icon: idleIcon },
@@ -64,9 +65,9 @@ export function ActionButton({
     <motion.button
       type={type}
       onClick={onClick}
-      disabled={disabled || state === 'loading'}
-      whileHover={reduceMotion || disabled ? undefined : { y: -1 }}
-      whileTap={reduceMotion || disabled ? undefined : { scale: 0.975 }}
+      disabled={isDisabled}
+      whileHover={reduceMotion || isDisabled ? undefined : { y: -1 }}
+      whileTap={reduceMotion || isDisabled ? undefined : { scale: 0.975 }}
       transition={{ duration: 0.12 }}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium',
