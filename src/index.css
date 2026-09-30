@@ -2,6 +2,7 @@
 
 @theme {
   --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-nisti-shimmer: nisti-shimmer 1.6s ease-in-out infinite;
 
   @keyframes fade-in {
     from {
@@ -13,6 +14,23 @@
       transform: translateY(0);
     }
   }
+
+  @keyframes nisti-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+:root {
+  --motion-micro: 140ms;
+  --motion-interface: 190ms;
+  --motion-content: 280ms;
+  --motion-data: 520ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html, body, #root {
@@ -24,3 +42,37 @@ html, body, #root {
   color: #fafafa; /* zinc-50 */
 }
 
+.nisti-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgb(39 39 42 / 0.78);
+}
+
+.nisti-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.055),
+    transparent
+  );
+  animation: nisti-shimmer 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .nisti-skeleton::after {
+    display: none;
+  }
+}
