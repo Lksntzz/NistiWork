@@ -1,11 +1,9 @@
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ActionButton } from '@/components/ui/ActionButton';
-import { Priority } from '../types';
 import { getBusinessDateToday } from '../utils/date';
 import { selectFolder } from '../services/apiClient';
 
