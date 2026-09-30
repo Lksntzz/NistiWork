@@ -1,15 +1,69 @@
-import { useState, ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCompany, useCompanyHistory, useUpdateCompanyStatus, useDeleteCompany, useUpdateCompany } from '../queries/useCompanies';
 import { CompanyFormModal } from '../components/CompanyFormModal';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { getNextAction, formatStatus } from '../utils/companyUtils';
 import { selectFolder } from '../services/apiClient';
 import { isBusinessDateOverdue } from '../utils/date';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ArrowLeft, FolderOpen, Calendar, Clock, Edit2, Trash2, ArrowRight, Building2, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Clock, Edit2, Trash2, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import toast from 'react-hot-toast';
 import { invoke } from '@tauri-apps/api/core';
+
+function CompanyDetailSkeleton() {
+  return (
+    <div className="p-8 max-w-5xl mx-auto space-y-8" aria-label="Carregando detalhes da demanda">
+      <Skeleton className="h-5 w-40" />
+      <div className="flex flex-col gap-8 md:flex-row">
+        <div className="flex-1 space-y-6">
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+            <div className="flex items-start justify-between gap-4">
+              <Skeleton className="h-9 w-64" />
+              <div className="flex gap-2">
+                <Skeleton className="h-9 w-9" />
+                <Skeleton className="h-9 w-9" />
+              </div>
+            </div>
+            <Skeleton className="mt-5 h-5 w-3/4" />
+            <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} className="rounded-lg border border-neutral-800 bg-neutral-800/30 p-4">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="mt-3 h-6 w-24" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="mt-4 h-14 w-full" />
+          </div>
+        </div>
+        <div className="w-full space-y-6 md:w-80">
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="mt-4 h-10 w-full" />
+            <Skeleton className="mt-3 h-3 w-3/4" />
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+            <Skeleton className="h-4 w-24" />
+            <div className="mt-5 space-y-4">
+              {[0, 1, 2].map((item) => (
+                <div key={item} className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-44" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const STATUS_OPTIONS = [
   'NOVA',
@@ -25,19 +79,32 @@ export function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: company, isLoading, isError } = useCompany(id!);
-  const { data: history } = useCompanyHistory(id!);
+  const { data: history, isLoading: isHistoryLoading } = useCompanyHistory(id!);
   const updateStatus = useUpdateCompanyStatus();
   const updateCompany = useUpdateCompany();
   const deleteCompany = useDeleteCompany();
-  
+  const reduceMotion = useReducedMotion();
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [statusFlash, setStatusFlash] = useState(false);
+  const previousStatus = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const currentStatus = company?.status;
+    if (!currentStatus) return;
+
+    if (previousStatus.current && previousStatus.current !== currentStatus) {
+      previousStatus.current = currentStatus;
+      setStatusFlash(true);
+      const timer = window.setTimeout(() => setStatusFlash(false), 850);
+      return () => window.clearTimeout(timer);
+    }
+
+    previousStatus.current = currentStatus;
+  }, [company?.status]);
   
   if (isLoading) {
-    return (
-      <div className="p-8 flex justify-center text-indigo-500">
-        <Building2 className="animate-spin" size={32} />
-      </div>
-    );
+    return <CompanyDetailSkeleton />;
   }
 
   if (isError) {
@@ -175,18 +242,40 @@ export function CompanyDetail() {
                   )}
                 </div>
               </div>
-<div className="bg-neutral-800/50 p-4 rounded-lg border border-neutral-800 col-span-2 md:col-span-1">
-                <p className="text-xs text-neutral-500 mb-1">Status Atual</p>
-                <select 
+<motion.div
+                className="p-4 rounded-lg border col-span-2 md:col-span-1"
+                animate={{
+                  backgroundColor: statusFlash ? 'rgba(99, 102, 241, 0.14)' : 'rgba(38, 38, 38, 0.5)',
+                  borderColor: statusFlash ? 'rgba(99, 102, 241, 0.45)' : 'rgb(38, 38, 38)',
+                }}
+                transition={{ duration: reduceMotion ? 0 : 0.28 }}
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <p className="text-xs text-neutral-500">Status Atual</p>
+                  <AnimatePresence>
+                    {updateStatus.isPending && (
+                      <motion.span
+                        initial={reduceMotion ? false : { opacity: 0, y: -2 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={reduceMotion ? undefined : { opacity: 0, y: -2 }}
+                        className="text-[10px] font-medium text-indigo-400"
+                      >
+                        Atualizando...
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <select
                   value={company.status}
                   onChange={handleStatusChange}
-                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-white text-sm outline-none focus:border-indigo-500"
+                  disabled={updateStatus.isPending}
+                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-white text-sm outline-none focus:border-indigo-500 disabled:opacity-60"
                 >
                   {STATUS_OPTIONS.map(opt => (
                     <option key={opt} value={opt}>{formatStatus(opt)}</option>
                   ))}
                 </select>
-              </div>
+              </motion.div>
             </div>
           </header>
 
@@ -280,26 +369,54 @@ export function CompanyDetail() {
 
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-neutral-400 uppercase tracking-wider mb-4">Histórico</h3>
-            <div className="space-y-4">
-              {history?.map((h) => (
-                <div key={h.id} className="relative pl-4 border-l-2 border-neutral-800 pb-2 last:border-0 last:pb-0">
-                  <div className="absolute -left-1.5 top-1.5 w-2.5 h-2.5 rounded-full bg-neutral-600 border-2 border-neutral-900" />
-                  <p className="text-sm text-white font-medium">
-                    {h.action === 'COMPANY_CREATED' ? 'Demanda Criada' : 'Status Alterado'}
-                  </p>
-                  {h.new_status && h.action === 'COMPANY_STATUS_CHANGED' && (
-                    <p className="text-xs text-neutral-400 mt-1">
-                      {h.previous_status ? formatStatus(h.previous_status) + ' → ' : ''}
-                      <span className="text-indigo-400 font-medium">{formatStatus(h.new_status)}</span>
-                    </p>
-                  )}
-                  <p className="text-xs text-neutral-500 mt-1 flex items-center gap-1">
-                    <Clock size={12} />
-                    {format(parseISO(h.timestamp), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                  </p>
-                </div>
-              ))}
-            </div>
+            {isHistoryLoading ? (
+              <div className="space-y-5">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="space-y-2 border-l-2 border-neutral-800 pl-4">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-44" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <motion.div layout className="space-y-4">
+                <AnimatePresence initial={false} mode="popLayout">
+                  {history?.map((h, index) => (
+                    <motion.div
+                      layout
+                      key={h.id}
+                      initial={reduceMotion ? false : { opacity: 0, x: 6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={reduceMotion ? undefined : { opacity: 0, x: -4 }}
+                      transition={{
+                        duration: reduceMotion ? 0 : 0.18,
+                        delay: reduceMotion ? 0 : Math.min(index * 0.02, 0.08),
+                      }}
+                      className="relative pl-4 border-l-2 border-neutral-800 pb-2 last:border-0 last:pb-0"
+                    >
+                      <motion.div
+                        initial={reduceMotion ? false : { scale: 0.6 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -left-1.5 top-1.5 w-2.5 h-2.5 rounded-full bg-neutral-600 border-2 border-neutral-900"
+                      />
+                      <p className="text-sm text-white font-medium">
+                        {h.action === 'COMPANY_CREATED' ? 'Demanda Criada' : 'Status Alterado'}
+                      </p>
+                      {h.new_status && h.action === 'COMPANY_STATUS_CHANGED' && (
+                        <p className="text-xs text-neutral-400 mt-1">
+                          {h.previous_status ? formatStatus(h.previous_status) + ' → ' : ''}
+                          <span className="text-indigo-400 font-medium">{formatStatus(h.new_status)}</span>
+                        </p>
+                      )}
+                      <p className="text-xs text-neutral-500 mt-1 flex items-center gap-1">
+                        <Clock size={12} />
+                        {format(parseISO(h.timestamp), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </p>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
