@@ -36,7 +36,7 @@ function NavItem({
       to={to}
       className={({ isActive }) =>
         cn(
-          'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium overflow-hidden',
+          'group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium overflow-hidden',
           'transition-colors duration-200',
           isActive
             ? 'text-zinc-100'
