@@ -1,32 +1,39 @@
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { AnimatedNumber } from '@/components/ui/AnimatedNumber';
+import { MetricBarChart } from '@/components/dashboard/MetricBarChart';
+import { ProgressDonut } from '@/components/dashboard/ProgressDonut';
 import { Clock, AlertCircle, PlayCircle, PlusCircle } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 
 const metrics = [
   {
     label: 'Atrasadas',
-    value: '2',
+    value: 2,
     icon: AlertCircle,
     iconClass: 'bg-rose-500/10 text-rose-500',
+    chartClass: 'bg-rose-500',
   },
   {
     label: 'Para Hoje',
-    value: '5',
+    value: 5,
     icon: Clock,
     iconClass: 'bg-amber-500/10 text-amber-500',
+    chartClass: 'bg-amber-500',
   },
   {
     label: 'Em Andamento',
-    value: '3',
+    value: 3,
     icon: PlayCircle,
     iconClass: 'bg-indigo-500/10 text-indigo-500',
+    chartClass: 'bg-indigo-500',
   },
   {
     label: 'Novas Demandas',
-    value: '1',
+    value: 1,
     icon: PlusCircle,
     iconClass: 'bg-emerald-500/10 text-emerald-500',
+    chartClass: 'bg-emerald-500',
   },
 ];
 
@@ -63,6 +70,15 @@ export function Dashboard() {
 
   const hoverMotion = reduceMotion ? undefined : { y: -3 };
   const tapMotion = reduceMotion ? undefined : { scale: 0.985 };
+
+  const chartData = metrics.map((metric) => ({
+    label: metric.label,
+    value: metric.value,
+    accentClass: metric.chartClass,
+  }));
+
+  const totalSignaled = metrics.reduce((sum, metric) => sum + metric.value, 0);
+  const inProgress = metrics.find((metric) => metric.label === 'Em Andamento')?.value ?? 0;
 
   return (
     <motion.div
@@ -102,13 +118,52 @@ export function Dashboard() {
                   </motion.div>
                   <div>
                     <p className="text-sm font-medium text-zinc-400">{metric.label}</p>
-                    <h2 className="text-2xl font-bold text-zinc-100 tabular-nums">{metric.value}</h2>
+                    <h2 className="text-2xl font-bold text-zinc-100 tabular-nums">
+                      <AnimatedNumber value={metric.value} />
+                    </h2>
                   </div>
                 </CardContent>
               </Card>
             </motion.div>
           );
         })}
+      </motion.div>
+
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+        variants={containerVariants}
+      >
+        <motion.div className="lg:col-span-2" variants={itemVariants}>
+          <Card className="h-full">
+            <CardContent className="p-6">
+              <div className="mb-5">
+                <h3 className="text-lg font-semibold text-zinc-100">Resumo de demandas</h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Comparação dos indicadores atuais do painel.
+                </p>
+              </div>
+              <MetricBarChart data={chartData} />
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div variants={itemVariants}>
+          <Card className="h-full">
+            <CardContent className="p-6">
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-zinc-100">Em andamento</h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Participação no total de itens sinalizados.
+                </p>
+              </div>
+              <ProgressDonut
+                value={inProgress}
+                total={totalSignaled}
+                label="Demandas em andamento"
+              />
+            </CardContent>
+          </Card>
+        </motion.div>
       </motion.div>
 
       <motion.div
