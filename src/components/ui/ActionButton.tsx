@@ -1,0 +1,94 @@
+import type { MouseEventHandler, ReactNode } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AlertCircle, Check, LoaderCircle } from 'lucide-react';
+import { cn } from '@/utils/cn';
+
+export type ActionState = 'idle' | 'loading' | 'success' | 'error';
+
+type ActionButtonProps = {
+  state?: ActionState;
+  idleLabel: string;
+  loadingLabel?: string;
+  successLabel?: string;
+  errorLabel?: string;
+  idleIcon?: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
+  onClick?: MouseEventHandler<HTMLButtonElement>;
+};
+
+export function ActionButton({
+  state = 'idle',
+  idleLabel,
+  loadingLabel = 'Processando...',
+  successLabel = 'Concluído',
+  errorLabel = 'Tentar novamente',
+  idleIcon,
+  className,
+  disabled,
+  type = 'button',
+  onClick,
+}: ActionButtonProps) {
+  const reduceMotion = useReducedMotion();
+  const isDisabled = disabled || state === 'loading';
+
+  const content = {
+    idle: { label: idleLabel, icon: idleIcon },
+    loading: {
+      label: loadingLabel,
+      icon: (
+        <motion.span
+          aria-hidden="true"
+          animate={reduceMotion ? undefined : { rotate: 360 }}
+          transition={
+            reduceMotion
+              ? undefined
+              : { duration: 0.85, repeat: Infinity, ease: 'linear' }
+          }
+        >
+          <LoaderCircle className="h-4 w-4" />
+        </motion.span>
+      ),
+    },
+    success: {
+      label: successLabel,
+      icon: <Check className="h-4 w-4" aria-hidden="true" />,
+    },
+    error: {
+      label: errorLabel,
+      icon: <AlertCircle className="h-4 w-4" aria-hidden="true" />,
+    },
+  }[state];
+
+  return (
+    <motion.button
+      type={type}
+      onClick={onClick}
+      disabled={isDisabled}
+      whileHover={reduceMotion || isDisabled ? undefined : { y: -1 }}
+      whileTap={reduceMotion || isDisabled ? undefined : { scale: 0.975 }}
+      transition={{ duration: 0.12 }}
+      className={cn(
+        'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium',
+        'transition-[background-color,border-color,color,opacity] duration-200',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        className
+      )}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={state}
+          className="inline-flex items-center gap-2"
+          initial={reduceMotion ? false : { opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduceMotion ? undefined : { opacity: 0, y: -3 }}
+          transition={{ duration: 0.12 }}
+        >
+          {content.icon}
+          <span>{content.label}</span>
+        </motion.span>
+      </AnimatePresence>
+    </motion.button>
+  );
+}
